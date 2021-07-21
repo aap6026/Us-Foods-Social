@@ -12,7 +12,7 @@ import { createSessionVaultServiceMock } from '@app/core/testing';
 import { selectAuthErrorMessage } from '@app/store';
 import { login, unlockSession } from '@app/store/actions';
 import { AuthState, initialState } from '@app/store/reducers/auth.reducer';
-import { AuthMode } from '@ionic-enterprise/identity-vault';
+import {Device} from '@ionic-enterprise/identity-vault';
 import { IonicModule, Platform } from '@ionic/angular';
 import { Store } from '@ngrx/store';
 import { MockStore, provideMockStore } from '@ngrx/store/testing';
@@ -138,14 +138,14 @@ describe('LoginPage', () => {
         const dispatchSpy = spyOn(store, 'dispatch');
         setInputValue(email, 'test@test.com');
         setInputValue(password, 'MyPassW0rd');
-        component.authMode = AuthMode.PasscodeOnly;
+        component.authMode = 'SessionPIN';
         click(button);
         expect(dispatchSpy).toHaveBeenCalledTimes(1);
         expect(dispatchSpy).toHaveBeenCalledWith(
           login({
             email: 'test@test.com',
             password: 'MyPassW0rd',
-            mode: AuthMode.PasscodeOnly,
+            mode: 'SessionPIN',
           }),
         );
       });
@@ -310,21 +310,21 @@ describe('LoginPage', () => {
         const sel = fixture.debugElement.query(By.css('#auth-mode-select'));
         const opt = sel.queryAll(By.css('ion-select-option'));
         expect(opt.length).toBe(3);
-        expect(opt[0].nativeElement.value).toBe(AuthMode.PasscodeOnly);
-        expect(opt[1].nativeElement.value).toBe(AuthMode.SecureStorage);
-        expect(opt[2].nativeElement.value).toBe(AuthMode.InMemoryOnly);
+        expect(opt[0].nativeElement.value).toBe('SessionPIN');
+        expect(opt[1].nativeElement.value).toBe('NeverLock');
+        expect(opt[2].nativeElement.value).toBe('ForceLogin');
       });
 
       it('defaults the auth mode to the first one', () => {
-        expect(component.authMode).toBe(AuthMode.PasscodeOnly);
+        expect(component.authMode).toBe('SessionPIN');
       });
 
       registerInputBindingTests();
 
       describe('when biometrics is available', () => {
         beforeEach(async () => {
-          const vault = TestBed.inject(SessionVaultService);
-          (vault.isBiometricsAvailable as any).and.returnValue(
+          spyOn(Device, 'isBiometricsEnabled');
+          (Device.isBiometricsEnabled as any).and.returnValue(
             Promise.resolve(true),
           );
           await component.ngOnInit();
@@ -335,11 +335,11 @@ describe('LoginPage', () => {
           const sel = fixture.debugElement.query(By.css('#auth-mode-select'));
           const opt = sel.queryAll(By.css('ion-select-option'));
           expect(opt.length).toBe(4);
-          expect(opt[0].nativeElement.value).toBe(AuthMode.BiometricOnly);
+          expect(opt[0].nativeElement.value).toBe('Device');
         });
 
         it('defaults the auth mode to the first one', () => {
-          expect(component.authMode).toBe(AuthMode.BiometricOnly);
+          expect(component.authMode).toBe('Device');
         });
       });
     });

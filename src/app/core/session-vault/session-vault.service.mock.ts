@@ -5,6 +5,5 @@ export const createSessionVaultServiceMock = () =>
     login: Promise.resolve(),
     restoreSession: Promise.resolve(null),
     logout: Promise.resolve(),
-    isBiometricsAvailable: Promise.resolve(false),
     canUnlock: Promise.resolve(false),
   });

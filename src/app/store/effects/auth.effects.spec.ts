@@ -19,7 +19,6 @@ import { provideMockActions } from '@ngrx/effects/testing';
 import { createNavControllerMock } from '@test/mocks';
 import { Observable, of, throwError } from 'rxjs';
 import { AuthEffects } from './auth.effects';
-import { AuthMode } from '@ionic-enterprise/identity-vault';
 
 describe('AuthEffects', () => {
   let actions$: Observable<any>;
@@ -101,7 +100,7 @@ describe('AuthEffects', () => {
           login({
             email: 'test@test.com',
             password: 'test',
-            mode: AuthMode.PasscodeOnly,
+            mode: 'Device',
           }),
         );
         effects.login$.subscribe(() => {
@@ -116,7 +115,7 @@ describe('AuthEffects', () => {
               },
               token: '314159',
             },
-            AuthMode.PasscodeOnly,
+            'Device'
           );
           done();
         });

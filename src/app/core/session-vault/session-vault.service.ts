@@ -1,75 +1,73 @@
 import { Injectable } from '@angular/core';
-import { Store } from '@ngrx/store';
+import { Session } from '@app/models';
+import { PinDialogComponent } from '@app/pin-dialog/pin-dialog.component';
+import { State } from '@app/store';
+import { sessionLocked, sessionRestored } from '@app/store/actions';
 import {
-  AuthMode,
-  IonicIdentityVaultUser,
-  IonicNativeAuthPlugin,
-  LockEvent,
-  VaultErrorCodes,
+  BrowserVault,
+  DeviceSecurityType,
+  IdentityVaultConfig,
+  Vault,
+  VaultType,
 } from '@ionic-enterprise/identity-vault';
 import { ModalController, Platform } from '@ionic/angular';
+import { Store } from '@ngrx/store';
 
-import { Session } from '@app/models';
-import { sessionLocked, sessionRestored } from '@app/store/actions';
-import { State } from '@app/store';
-import { BrowserVaultPlugin } from '../browser-vault/browser-vault.plugin';
-import { PinDialogComponent } from '@app/pin-dialog/pin-dialog.component';
+export type UnlockMode = 'Device' | 'SessionPIN' | 'NeverLock' | 'ForceLogin';
 
 @Injectable({
   providedIn: 'root',
 })
-export class SessionVaultService extends IonicIdentityVaultUser<Session> {
+export class SessionVaultService {
+  private vault: BrowserVault | Vault;
+  private session: Session;
+  private sessionKey = 'session';
+
   constructor(
-    private browserVaultPlugin: BrowserVaultPlugin,
     private modalController: ModalController,
     platform: Platform,
     private store: Store<State>,
   ) {
-    super(platform, {
-      unlockOnAccess: true,
-      hideScreenOnBackground: true,
-      lockAfter: 5000,
-      allowSystemPinFallback: true,
-      shouldClearVaultAfterTooManyFailedAttempts: false,
+    const config: IdentityVaultConfig = {
+      key: 'com.kensodemann.teataster',
+      type: VaultType.SecureStorage,
+      lockAfterBackgrounded: 5000,
+      shouldClearVaultAfterTooManyFailedAttempts: true,
+      customPasscodeInvalidUnlockAttempts: 2,
+      unlockVaultOnLoad: false,
+    };
+
+    this.vault = platform.is('hybrid')
+      ? new Vault(config)
+      : new BrowserVault(config);
+
+    this.vault.onLock(() => {
+      this.session = undefined;
+      this.store.dispatch(sessionLocked());
     });
   }
 
+  async login(session: Session, unlockMode: UnlockMode): Promise<void> {
+    this.session = session;
+    await this.vault.setValue(this.sessionKey, session);
+    await this.setUnlockMode(unlockMode);
+  }
+
+  async logout(): Promise<void> {
+    this.session = undefined;
+    return this.vault.clear();
+  }
+
   async restoreSession(): Promise<Session> {
-    try {
-      return await super.restoreSession();
-    } catch (error) {
-      if (error.code === VaultErrorCodes.VaultLocked) {
-        const vault = await this.getVault();
-        await vault.clear();
-      } else {
-        throw error;
-      }
+    if (!this.session) {
+      this.session = await this.vault.getValue(this.sessionKey);
+      this.store.dispatch(sessionRestored({ session: this.session }));
     }
+    return this.session;
   }
 
   async canUnlock(): Promise<boolean> {
-    if (!(await this.hasStoredSession())) {
-      return false;
-    }
-    const vault = await this.getVault();
-    if (!(await vault.isLocked())) {
-      return false;
-    }
-
-    const mode = await this.getAuthMode();
-    return (
-      mode === AuthMode.PasscodeOnly ||
-      mode === AuthMode.BiometricAndPasscode ||
-      (mode === AuthMode.BiometricOnly && (await this.isBiometricsAvailable()))
-    );
-  }
-
-  onVaultLocked(event: LockEvent) {
-    this.store.dispatch(sessionLocked());
-  }
-
-  onSessionRestored(session: Session) {
-    this.store.dispatch(sessionRestored({ session }));
+    return this.vault.isLocked();
   }
 
   async onPasscodeRequest(isPasscodeSetRequest: boolean): Promise<string> {
@@ -85,10 +83,40 @@ export class SessionVaultService extends IonicIdentityVaultUser<Session> {
     return Promise.resolve(data || '');
   }
 
-  getPlugin(): IonicNativeAuthPlugin {
-    if ((this.platform as Platform).is('hybrid')) {
-      return super.getPlugin();
+  setUnlockMode(unlockMode: UnlockMode): Promise<void> {
+    let type: VaultType;
+    let deviceSecurityType: DeviceSecurityType | undefined;
+
+    switch (unlockMode) {
+      case 'Device':
+        type = VaultType.DeviceSecurity;
+        deviceSecurityType = DeviceSecurityType.Both;
+        break;
+
+      case 'SessionPIN':
+        type = VaultType.CustomPasscode;
+        deviceSecurityType = undefined;
+        break;
+
+      case 'ForceLogin':
+        type = VaultType.InMemory;
+        deviceSecurityType = undefined;
+        break;
+
+      case 'NeverLock':
+        type = VaultType.SecureStorage;
+        deviceSecurityType = undefined;
+        break;
+
+      default:
+        type = VaultType.SecureStorage;
+        deviceSecurityType = DeviceSecurityType.SystemPasscode;
     }
-    return this.browserVaultPlugin;
+
+    return this.vault.updateConfig({
+      ...this.vault.config,
+      type,
+      deviceSecurityType,
+    });
   }
 }

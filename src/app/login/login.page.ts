@@ -1,12 +1,11 @@
 import { Component, NgZone, OnInit } from '@angular/core';
-import { Store } from '@ngrx/store';
-import { Observable } from 'rxjs';
-
+import { SessionVaultService, UnlockMode } from '@app/core';
 import { selectAuthErrorMessage, State } from '@app/store';
 import { login, unlockSession } from '@app/store/actions';
-import { SessionVaultService } from '@app/core';
+import { Device } from '@ionic-enterprise/identity-vault';
 import { Platform } from '@ionic/angular';
-import { AuthMode } from '@ionic-enterprise/identity-vault';
+import { Store } from '@ngrx/store';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'app-login',
@@ -19,18 +18,18 @@ export class LoginPage implements OnInit {
   canUnlock = false;
 
   displayLockingOptions: boolean;
-  authMode: AuthMode;
-  authModes: Array<{ mode: AuthMode; label: string }> = [
+  authMode: UnlockMode;
+  authModes: Array<{ mode: UnlockMode; label: string }> = [
     {
-      mode: AuthMode.PasscodeOnly,
+      mode: 'SessionPIN',
       label: 'Session PIN Unlock',
     },
     {
-      mode: AuthMode.SecureStorage,
+      mode: 'NeverLock',
       label: 'Never Lock Session',
     },
     {
-      mode: AuthMode.InMemoryOnly,
+      mode: 'ForceLogin',
       label: 'Force Login',
     },
   ];
@@ -49,10 +48,10 @@ export class LoginPage implements OnInit {
     if (this.platform.is('hybrid')) {
       this.canUnlock = await this.sessionVault.canUnlock();
       this.displayLockingOptions = true;
-      if (await this.sessionVault.isBiometricsAvailable()) {
+      if (await Device.isBiometricsEnabled()) {
         this.authModes = [
           {
-            mode: AuthMode.BiometricOnly,
+            mode: 'Device',
             label: 'Biometric Unlock',
           },
           ...this.authModes,
